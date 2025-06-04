@@ -1,0 +1,265 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User roles enum
+enum UserRole {
+  ADMIN
+  HR_MANAGER
+  RECRUITER
+}
+
+// Candidate status enum
+enum CandidateStatus {
+  NEW
+  SHORTLISTED
+  INTERVIEW_SCHEDULED
+  HIRED
+  REJECTED
+}
+
+// Interview type enum
+enum InterviewType {
+  PHONE_SCREEN
+  TECHNICAL
+  BEHAVIORAL
+  FINAL_ROUND
+  PANEL
+  CULTURAL_FIT
+}
+
+// Interview format enum
+enum InterviewFormat {
+  VIDEO_CALL
+  PHONE_CALL
+  IN_PERSON
+}
+
+// Interview status enum
+enum InterviewStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+// Email status enum
+enum EmailStatus {
+  DRAFT
+  SENT
+  DELIVERED
+  OPENED
+  FAILED
+}
+
+// File type enum
+enum FileType {
+  RESUME
+  COVER_LETTER
+  PORTFOLIO
+  OTHER
+}
+
+// User model
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  role          UserRole  @default(RECRUITER)
+  passwordHash  String
+  lastLoginAt   DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  interviews    Interview[]    @relation("Interviewer")
+  emailLogs     EmailLog[]     @relation("Sender")
+  files         File[]         @relation("UploadedBy")
+
+  // Indexes
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+}
+
+// Candidate model
+model Candidate {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  phone         String?
+  designation   String?
+  experience    Int?
+  expectedSalary Int?
+  status        CandidateStatus @default(NEW)
+  source        String?
+  stage         String?
+  currentCompany String?
+  currentTitle  String?
+  noticePeriod  Int?
+  resumeUrl     String?
+  linkedinUrl   String?
+  githubUrl     String?
+  portfolioUrl  String?
+  skills        String[]
+  notes         String?   @db.Text
+  rating        Float?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  interviews    Interview[]
+  emailLogs     EmailLog[]     @relation("Recipient")
+  fileUploads   FileUpload[]
+  candidateSkills CandidateSkill[]
+  files         File[]         @relation("CandidateFiles")
+
+  // Indexes
+  @@index([email])
+  @@index([status])
+  @@index([isActive])
+  @@index([source])
+  @@index([stage])
+  @@index([currentCompany])
+  @@index([currentTitle])
+}
+
+// CandidateSkill model (Many-to-Many)
+model CandidateSkill {
+  id          String    @id @default(cuid())
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  candidateId String
+  skill       String
+  createdAt   DateTime  @default(now())
+
+  @@unique([candidateId, skill])
+  @@index([skill])
+}
+
+// Interview model
+model Interview {
+  id            String    @id @default(cuid())
+  candidate     Candidate @relation(fields: [candidateId], references: [id])
+  candidateId   String
+  interviewer   User      @relation("Interviewer", fields: [interviewerId], references: [id])
+  interviewerId String
+  date          DateTime
+  duration      Int       // Duration in minutes
+  type          InterviewType
+  format        InterviewFormat
+  location      String?
+  status        InterviewStatus @default(SCHEDULED)
+  notes         String?   @db.Text
+  feedback      String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Indexes
+  @@index([candidateId])
+  @@index([interviewerId])
+  @@index([date])
+  @@index([status])
+}
+
+// EmailTemplate model
+model EmailTemplate {
+  id            String    @id @default(cuid())
+  name          String
+  subject       String
+  content       String    @db.Text
+  variables     String[]  // Array of template variables
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  emailLogs     EmailLog[]
+
+  // Indexes
+  @@index([name])
+  @@index([isActive])
+}
+
+// EmailLog model
+model EmailLog {
+  id            String    @id @default(cuid())
+  template      EmailTemplate @relation(fields: [templateId], references: [id])
+  templateId    String
+  sender        User      @relation("Sender", fields: [senderId], references: [id])
+  senderId      String
+  recipient     Candidate @relation("Recipient", fields: [recipientId], references: [id])
+  recipientId   String
+  subject       String
+  content       String    @db.Text
+  status        EmailStatus @default(DRAFT)
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  openedAt      DateTime?
+  errorMessage  String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Indexes
+  @@index([templateId])
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([status])
+  @@index([sentAt])
+}
+
+// File model
+model File {
+  id            String    @id @default(cuid())
+  name          String
+  type          FileType
+  url           String
+  size          Int       // Size in bytes
+  mimeType      String
+  uploadedBy    User      @relation("UploadedBy", fields: [uploadedById], references: [id])
+  uploadedById  String
+  candidate     Candidate @relation("CandidateFiles", fields: [candidateId], references: [id])
+  candidateId   String
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Indexes
+  @@index([uploadedById])
+  @@index([candidateId])
+  @@index([type])
+  @@index([isActive])
+}
+
+model FileUpload {
+  id          String   @id @default(cuid())
+  filename    String
+  originalName String
+  mimeType    String
+  size        Int
+  url         String
+  key         String
+  candidateId String?
+  type        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  candidate   Candidate? @relation(fields: [candidateId], references: [id])
+
+  @@index([candidateId])
+  @@index([type])
+} 
